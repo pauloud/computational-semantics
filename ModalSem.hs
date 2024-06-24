@@ -12,8 +12,9 @@ module ModalSem where
         func :: String -> [a] -> Maybe a}
     data Model a = Model (World a) [World a]
 
-    truthValue :: (F.Variable -> Maybe a) -> Model a -> Formula -> Bool 
+    truthValue :: (F.Variable -> Maybe a) -> Model a -> PropositionBuilder a -> Bool 
     truthValue freeVarsBinding model modalFormulaWithDefiniteDescription = undefined 
 
+    
 
 
