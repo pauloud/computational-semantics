@@ -2,9 +2,11 @@ module ModalSyn where
     import qualified FSynF as F
     import Data.Void ( Void )
     type Function = String 
-    data Term a = T F.Term | The F.Variable Formula |Elem a deriving (Show,Eq)
-    data PropositionBuilder a = F (F.Formula F.Variable) | Lambda F.Variable Formula (Term a)
-        |Box Formula deriving (Show,Eq)
-    type Formula = PropositionBuilder Void  
+
+    data Term var fn = Var var | Struct fn [Term var fn] 
+        |The var (Formula var fn) deriving(Show,Eq)
+    data Formula var fn  = F (F.Formula var) | Lambda var (Formula var fn) (Term var fn)
+        |Box (Formula var fn) deriving (Show,Eq)
+      
 
     

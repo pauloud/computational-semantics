@@ -92,8 +92,8 @@ data Formula a = Atom String [a]
                | Equi (Formula a) (Formula a)
                | Conj [Formula a]
                | Disj [Formula a] 
-               | Forall Variable (Formula a)
-               | Exists Variable (Formula a)
+               | Forall a (Formula a)
+               | Exists a (Formula a)
                deriving Eq
 
 instance Show a => Show (Formula a) where 
