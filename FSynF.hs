@@ -85,16 +85,17 @@ x = Variable "x" []
 y = Variable "y" []
 z = Variable "z" []
 
-data Formula a = Atom String [a]
+data FormulaGen var a = Atom String [a]
                | Eq a a
-               | Neg  (Formula a)
-               | Impl (Formula a) (Formula a) 
-               | Equi (Formula a) (Formula a)
-               | Conj [Formula a]
-               | Disj [Formula a] 
-               | Forall a (Formula a)
-               | Exists a (Formula a)
+               | Neg  (FormulaGen var a)
+               | Impl (FormulaGen var a) (FormulaGen var a) 
+               | Equi (FormulaGen var a) (FormulaGen var a)
+               | Conj [FormulaGen var a]
+               | Disj [FormulaGen var a] 
+               | Forall var (FormulaGen var a)
+               | Exists var (FormulaGen var a)
                deriving Eq
+type Formula = FormulaGen Variable 
 
 instance Show a => Show (Formula a) where 
   show (Atom s [])   = s
@@ -112,8 +113,11 @@ instance Show a => Show (Formula a) where
   show (Forall v f)  = "A " ++  show v ++ (' ' : show f)
   show (Exists v f)  = "E " ++  show v ++ (' ' : show f)
 
-formula0 = Atom "R" [x,y]
+
+formula0 = Atom "R" [x,y] :: Formula Variable
+formula1 :: FormulaGen Variable Variable
 formula1 = Forall x (Atom "R" [x,x])
+formula2 :: FormulaGen Variable Variable
 formula2 = Forall x 
             (Forall y
               (Impl (Atom "R" [x,y]) (Atom "R" [y,x])))

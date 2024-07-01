@@ -12,7 +12,15 @@ module ModalSem where
         domain :: Set.Set a,
         pred :: String -> [a] -> Bool,
         func :: fn  -> [a] -> Maybe a}
-    data Model fn a = Model (World fn a) [World fn a]
+    data Graph fn a = Graph {world :: World fn a,
+        neighbors :: [Graph fn a]}
+        
+    possibleWorlds :: Graph fn a -> [World fn a]
+    possibleWorlds = map world . neighbors 
+    
+    data Model fn a = Model {
+        whooleDomain :: Set.Set a,
+        graph :: Graph fn a}
 
     bindVar :: Eq var => var  -> Maybe a -> (var -> Maybe a) -> var -> Maybe a
     bindVar v e func v1 = if v1 == v then e else func v1
@@ -22,10 +30,10 @@ module ModalSem where
 
 
     query :: var  -> (var -> Maybe a) -> Model fn a -> Formula var fn -> [a]
-    query _ _ _ _= undefined
+    query x binding model formula = filter (trutValue binding model formula)
 
     termValue :: Ord a => (var -> Maybe a) -> Model fn a -> Term var fn -> Maybe a
-    termValue binding model@(Model world _)  = \case
+    termValue binding model@(Model _ (Graph world _))  = \case
                 Var x -> binding x
                 Struct f t -> if all isJust values then func world f $ map fromJust values else Nothing
                     where values = termValues binding model t
@@ -38,8 +46,8 @@ module ModalSem where
 
 
     truthValue :: (Ord a, Eq var) => (var -> Maybe a) -> Model fn a -> Formula var fn -> Bool
-    truthValue binding model@(Model world possibleWorlds) =
-        let atomTruth p vars = (all (isJust . binding) vars && pred world p (map (fromJust.binding) vars))
+    truthValue binding model@(Model _ graph) =
+        let atomTruth p vars = (all (isJust . binding) vars && pred (world graph) p (map (fromJust.binding) vars))
             truthV = \case
                 F.Atom p vars -> atomTruth p vars
                 F.Eq x y -> ((isJust (binding x) && isJust (binding y)) && (fromJust (binding x) == fromJust (binding y)))
