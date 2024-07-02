@@ -1,7 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 
 module ModalSem where
-    import DefiniteDefSyn
+    import DefiniteDescSyn
     import Data.Maybe(isJust,fromJust)
     import qualified FSynF as F
     import qualified Data.Set as Set
