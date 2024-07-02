@@ -1,7 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 
 module ModalSem where
-    import ModalSyn
+    import DefiniteDefSyn
     import Data.Maybe(isJust,fromJust)
     import qualified FSynF as F
     import qualified Data.Set as Set
@@ -11,15 +11,15 @@ module ModalSem where
     data World fn a = World {
         domain :: Set.Set a,
         pred :: String -> [a] -> Bool,
-        func :: fn  -> [a] -> Maybe a}
+        func :: fn  -> Maybe ([a] -> Maybe a)}
     data Graph fn a = Graph {world :: World fn a,
         neighbors :: [Graph fn a]}
-        
+
     possibleWorlds :: Graph fn a -> [World fn a]
     possibleWorlds = map world . neighbors 
     
-    data Model fn a = Model {
-        whooleDomain :: Set.Set a,
+    data PModel fn a = PModel {
+        wholeDomain :: Set.Set a,
         graph :: Graph fn a}
 
     bindVar :: Eq var => var  -> Maybe a -> (var -> Maybe a) -> var -> Maybe a
@@ -29,25 +29,27 @@ module ModalSem where
     allIn list set = all (`Set.member` set) list
 
 
-    query :: var  -> (var -> Maybe a) -> Model fn a -> Formula var fn -> [a]
-    query x binding model formula = filter (trutValue binding model formula)
-
-    termValue :: Ord a => (var -> Maybe a) -> Model fn a -> Term var fn -> Maybe a
-    termValue binding model@(Model _ (Graph world _))  = \case
+    query :: (Ord a,Eq var) => var  -> (var -> Maybe a) -> PModel fn a -> Formula var fn -> [a]
+    --query x binding model formula = filter (\e -> truthValue (bindVar x (Just e) binding) model formula) (Set.toList $ wholeDomain model)
+    query x binding model formula =
+        [e | e <- Set.toList (wholeDomain model),truthValue (bindVar x (Just e) binding) model formula]
+--f(t,u) 
+    termValue :: (Ord a,Eq var) => (var -> Maybe a) -> PModel fn a -> Term var fn -> Maybe a
+    termValue binding model@(PModel _ (Graph world _))  = \case
                 Var x -> binding x
-                Struct f t -> if all isJust values then func world f $ map fromJust values else Nothing
-                    where values = termValues binding model t
+                Struct f ts -> if all isJust values then func world f >>= (\f -> f $ map fromJust values) else Nothing
+                    where values = termValues binding model ts
                 The var formula -> case query var binding model formula of
                     [e] -> Just e
-                    _ -> Nothing
-    termValues :: Ord a => (var -> Maybe a) -> Model fn a -> [Term var fn] -> [Maybe a]
+                    _ -> Nothing 
+    termValues :: (Ord a,Eq var) => (var -> Maybe a) -> PModel fn a -> [Term var fn] -> [Maybe a]
     termValues binding model = map (termValue binding model)
 
 
 
-    truthValue :: (Ord a, Eq var) => (var -> Maybe a) -> Model fn a -> Formula var fn -> Bool
-    truthValue binding model@(Model _ graph) =
-        let atomTruth p vars = (all (isJust . binding) vars && pred (world graph) p (map (fromJust.binding) vars))
+    truthValue :: (Ord a, Eq var) => (var -> Maybe a) -> PModel fn a -> Formula var fn -> Bool
+    truthValue binding model@(PModel _ (Graph world _)) =
+        let atomTruth p vars = (all (isJust . binding) vars && pred world p (map (fromJust.binding) vars))
             truthV = \case
                 F.Atom p vars -> atomTruth p vars
                 F.Eq x y -> ((isJust (binding x) && isJust (binding y)) && (fromJust (binding x) == fromJust (binding y)))
@@ -56,13 +58,14 @@ module ModalSem where
                 F.Equi f1 f2 -> truthV f1 == truthV f2
                 F.Conj fs -> all truthV fs
                 F.Disj fs -> any truthV fs
-                F.Forall x f -> all (\e -> truthValue (bindVar x (Just e) binding) model $ F f) $ domain world
+                F.Forall x f -> all (\e -> truthValue (bindVar x (Just e) binding) model $ F f) $ domain world 
                 F.Exists x f -> any (\e -> truthValue (bindVar x (Just e) binding) model $ F f) $ domain world
+                _ -> error "modalities not yet defined"
             in \case
             F f -> truthV f
             Lambda x f t -> let b = bindVar x (termValue binding model t) binding
                 in truthValue b model f
-
+          
 
 
 
