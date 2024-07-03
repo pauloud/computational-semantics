@@ -1,4 +1,3 @@
-{-# LANGUAGE LambdaCase,PatternSynonyms #-}
 module DefiniteDescSyn where
     import qualified FSynF as F
     import Data.Void ( Void )
