@@ -1,28 +1,26 @@
 {-# LANGUAGE LambdaCase #-}
 
 module ModalSem where
-    import DefiniteDescSyn
     import Data.Maybe(isJust,fromJust)
     import Data.Foldable(find)
-    import qualified FSynF as F
+    import ModalSynF
     import qualified Data.Set as Set
     import Prelude hiding (pred)
 
-    
+    type Form fn var pred = Formula (Term fn var pred) var pred 
 
-    data World fn a = World {
+    data World fn pred a = World {
         existsIn :: a -> Bool,
-        pred :: String -> [a] -> Bool,
+        rel :: pred -> [a] -> Bool,
         func :: fn  -> Maybe ([a] -> Maybe a)}
-    data Graph fn a = Graph {world :: World fn a,
-        neighbors :: [Graph fn a]}
+    data Graph pred fn a = Graph {world :: World fn pred a,
+        neighbors :: [Graph pred fn a]}
 
-    possibleWorlds :: Graph fn a -> [World fn a]
-    possibleWorlds = map world . neighbors
+   
 
-    data PModel fn a = PModel {
+    data PModel fn pred a = PModel {
         wholeDomain :: Set.Set a,
-        graph :: Graph fn a}
+        graph :: Graph pred fn a}
 
     bindVar :: Eq var => var  -> Maybe a -> (var -> Maybe a) -> var -> Maybe a
     bindVar v e func v1 = if v1 == v then e else func v1
@@ -31,12 +29,12 @@ module ModalSem where
     allIn list set = all (`Set.member` set) list
 
 
-    query :: (Ord a,Eq var) => var  -> (var -> Maybe a) -> PModel fn a -> Formula var fn -> [a]
+    query :: (Ord a,Eq var) => var  -> (var -> Maybe a) -> PModel fn pred a -> Form fn var pred -> [a]
     --query x binding model formula = filter (\e -> truthValue (bindVar x (Just e) binding) model formula) (Set.toList $ wholeDomain model)
     query x binding model formula =
         [e | e <- Set.toList (wholeDomain model),truthValue (bindVar x (Just e) binding) model formula]
 --f(t,u) 
-    termValue :: (Ord a,Eq var) => (var -> Maybe a) -> PModel fn a -> Term var fn -> Maybe a
+    termValue :: (Ord a,Eq var) => (var -> Maybe a) -> PModel fn pred a -> Term fn var pred -> Maybe a
     termValue binding model@(PModel _ (Graph world _))  = \case
                 Var x ->find (existsIn world) (binding x)
                 Struct f ts -> if all isJust values then func world f >>= (\f -> f $ map fromJust values) else Nothing
@@ -44,30 +42,28 @@ module ModalSem where
                 The var formula -> case query var binding model formula of
                     [e] -> Just e
                     _ -> Nothing
-    termValues :: (Ord a,Eq var) => (var -> Maybe a) -> PModel fn a -> [Term var fn] -> [Maybe a]
+    termValues :: (Ord a,Eq var) => (var -> Maybe a) -> PModel fn pred a -> [Term fn var pred] -> [Maybe a]
     termValues binding model = map (termValue binding model)
 
 
-
-    truthValue :: (Ord a, Eq var) => (var -> Maybe a) -> PModel fn a -> Formula var fn -> Bool
-    truthValue binding model@(PModel wholeDomain (Graph world possibleWorlds)) =
-        let atomTruth p vars = (all (isJust . binding) vars && pred world p (map (fromJust.binding) vars))
-            truthV = \case
-                F.Atom p vars -> atomTruth p vars
-                F.Eq x y -> isJust (binding x) && (Just (fromJust (binding x)) == binding y) && existsIn world (fromJust $ binding x)
-                F.Neg f -> not $ truthV f
-                F.Impl f1 f2 ->  not (truthV f1) || truthV f2
-                F.Equi f1 f2 -> truthV f1 == truthV f2
-                F.Conj fs -> all truthV fs
-                F.Disj fs -> any truthV fs
-                F.Forall x f -> all (\e -> truthValue (bindVar x (Just e) binding) model $ F f) wholeDomain
-                F.Exists x f -> any (\e -> truthValue (bindVar x (Just e) binding) model $ F f) wholeDomain
-                F.Box f -> all (\w -> truthValue binding (PModel wholeDomain w) (F f)) possibleWorlds
-                F.Diamond f -> any (\w -> truthValue binding (PModel wholeDomain w) (F f)) possibleWorlds
-            in \case
-            F f -> truthV f
-            Lambda x f t -> let b = bindVar x (termValue binding model t) binding
+    -- Exists and Forall should quantify only on actual world
+    -- Semantic of Lambda abstraction is not sound
+    truthValue :: (Ord a, Eq var) => (var -> Maybe a) -> PModel fn pred a -> Form fn var pred -> Bool
+    truthValue binding model@(PModel wholeDomain (Graph world possibleWorlds)) = \case
+        Atom p vars -> all (isJust.binding) vars && rel world p (map (fromJust.binding) vars)
+        Eq x y -> isJust (termValue binding model x) && (termValue binding model x == termValue binding model y) -- && existsIn world (fromJust $ binding x)
+        Neg f -> not $ truthValue binding model f
+        Impl f1 f2 ->  not (truthValue binding model f1) || truthValue binding model f2
+        Equi f1 f2 -> truthValue binding model f1 == truthValue binding model f2
+        Conj fs -> all (truthValue binding model) fs
+        Disj fs -> any (truthValue binding model) fs
+        Forall x f -> all (\e -> truthValue (bindVar x (Just e) binding) model f) wholeDomain
+        Exists x f -> any (\e -> truthValue (bindVar x (Just e) binding) model f) wholeDomain
+        Box f -> all (\w -> truthValue binding (PModel wholeDomain w) f) possibleWorlds
+        Diamond f -> any (\w -> truthValue binding (PModel wholeDomain w) f) possibleWorlds
+        Lambda x f t -> let b = bindVar x (termValue binding model t) binding
                 in truthValue b model f
+         
 
 
 
