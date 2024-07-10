@@ -7,7 +7,7 @@ module ModalSem where
     import qualified Data.Set as Set
     import Prelude hiding (pred)
 
-    type Form fn var pred = Formula (Term fn var pred) var pred 
+     
 
     data World fn pred a = World {
         existsIn :: a -> Bool,
