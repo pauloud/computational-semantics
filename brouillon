@@ -1,0 +1,53 @@
+data ModalContext fn var pred world elem m = ModalContext {
+    actualWorld :: m world,
+    accessibility :: world -> m [world],
+    domain :: world -> m [elem],
+    fnV :: fn -> [elem] -> m (Maybe elem),
+    varV :: var -> ModalT fn var pred world elem m (Maybe elem),
+    predV :: pred -> [elem] -> m Bool
+
+
+
+}
+
+
+type ModalT fn var pred world elem m =
+    ReaderT (ModalContext fn var pred world elem m) m
+
+termValue :: Monad m => Term fn var pred -> ModalT fn var pred world elem m (Maybe elem)
+termValue = \case
+    Var x -> do
+        context <- ask
+        varV context x
+    Struct f terms -> do
+        values <- mapM termValue terms
+        if any isNothing values then return Nothing else do
+            context <- ask
+            lift $ fnV context f (map fromJust values)
+    The x formula -> return $ error "definite description not yet implemented"
+
+
+changeWorld :: Monad m =>  m world
+    -> ModalT fn var pred world elem m a
+    -> ModalT fn var pred world elem m a
+changeWorld w = local (\context -> context{actualWorld = w})
+
+formulaValue :: Monad m => Formula fn var pred -> ModalT fn var pred world elem m Bool
+formulaValue = \case
+    Atom p xs -> do
+        context <- ask
+        values <- mapM (varV context) xs
+        if any isNothing values then return False else do
+            lift $ predV context p (map fromJust values)
+    Box f -> do
+        context <- ask
+        possibleWorlds <-  actualWorld context >>= accessibility context 
+        return undefined
+
+
+
+data ModalContextT world elem m = ModalContext {
+  actualWorld :: forall a. (world -> ModalT world elem m a) -> ModalT world elem m a,
+  possibleWorld :: forall a. (world -> ModalT world elem m a) -> ModalT world elem m [a],
+}
+type ModalT world elem m = ReaderT (ModalContextT world elem m) m 

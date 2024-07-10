@@ -4,14 +4,15 @@ import Control.Monad.Reader
 import ModalSynF
 import Control.Monad (join, filterM)
 import Data.Maybe (isNothing, fromJust)
+import Data.Functor.Identity
 
 
 data ModalContext fn var pred world elem m = ModalContext {
     actualWorld ::  ModalT fn var pred world elem m world,
     accessibility :: world -> ModalT fn var pred world elem m [world],
     domain :: world -> ModalT fn var pred world elem m [elem],
-    fnV :: world -> fn -> [elem] -> ModalT fn var pred world elem m (Maybe elem),
     varV :: var -> ModalT fn var pred world elem m (Maybe elem),
+    fnV :: world -> fn -> [elem] -> ModalT fn var pred world elem m (Maybe elem),
     predV :: world -> pred -> [elem] -> ModalT fn var pred world elem m Bool
 }
 
@@ -19,7 +20,7 @@ data ModalContext fn var pred world elem m = ModalContext {
 type ModalT fn var pred world elem m =
     ReaderT (ModalContext fn var pred world elem m) m
 
-termValue :: Eq var => Eq elem => Monad m => 
+termValue :: Eq var => Eq elem => Monad m =>
     Term fn var pred -> ModalT fn var pred world elem m (Maybe elem)
 termValue = \case
     Var x -> do
@@ -31,20 +32,20 @@ termValue = \case
             context <- ask
             currentWorld <- actualWorld context
             fnV context currentWorld f (map fromJust values)
-    The x formula -> do 
+    The x formula -> do
         context <- ask
-        currentWorld <- actualWorld context 
-        actualDomain <- domain context currentWorld 
+        currentWorld <- actualWorld context
+        actualDomain <- domain context currentWorld
         elems <- query x actualDomain formula
-        case elems of 
+        case elems of
             [e] -> return (Just e)
-            _ -> return Nothing 
+            _ -> return Nothing
 
 query :: (Monad m, Eq elem, Eq p) => p -> [elem] -> Form fn p pred -> ReaderT (ModalContext fn p pred world elem m) m [elem]
-query x domain formula= 
-    let bindX e context = context{varV = \y -> if y==x then return (Just e) else varV context y} in 
-        filterM (\e -> local (bindX e) (truthValue formula)) domain 
-        
+query x domain formula=
+    let bindX e context = context{varV = \y -> if y==x then return (Just e) else varV context y} in
+        filterM (\e -> local (bindX e) (truthValue formula)) domain
+
 changeWorld :: Monad m =>  ModalT fn var pred world elem m world
     -> ModalT fn var pred world elem m a
     -> ModalT fn var pred world elem m a
@@ -58,26 +59,26 @@ inPossibleWorlds mV = do
     mapM (\w -> changeWorld (return w)  mV) worlds
 
 type Form fn var pred = Formula (Term fn var pred) var pred
-truthValue :: Eq var => Eq elem => Monad m => 
+truthValue :: Eq var => Eq elem => Monad m =>
     Form fn var pred -> ModalT fn var pred world elem m Bool
 truthValue = \case
     Atom p xs -> do
         context <- ask
         currentWorld <- actualWorld context
         values <- mapM (varV context) xs
-        if any isNothing values then return False 
+        if any isNothing values then return False
             else predV context currentWorld p (map fromJust values)
     Eq t1 t2 -> do
         v1 <- termValue t1
         v2 <- termValue t2
         return (v1 == v2)
     Neg f -> not <$> truthValue f
-    Impl f1 f2 -> do 
-       b1 <- truthValue f1 
-       b2 <- truthValue f2 
+    Impl f1 f2 -> do
+       b1 <- truthValue f1
+       b2 <- truthValue f2
        return (not b1 || b2)
-    Conj fs -> and <$> mapM truthValue fs 
-    Disj fs -> or <$> mapM truthValue fs 
+    Conj fs -> and <$> mapM truthValue fs
+    Disj fs -> or <$> mapM truthValue fs
     Box f -> do
         truthValues <- inPossibleWorlds (truthValue f)
         return (and truthValues)
@@ -85,11 +86,31 @@ truthValue = \case
         truthValues <- inPossibleWorlds (truthValue f)
         return (or truthValues)
     Lambda x f t -> withReaderT
-        (\context -> context{varV = \y -> if y == x 
+        (\context -> context{varV = \y -> if y == x
             then termValue t else varV context y})
         (truthValue f)
-    
-   
+
+interpretFormula :: (Eq elem, Eq var) => 
+    world
+    -> (world -> [world])
+    -> (world -> [elem])
+    -> (var -> elem)
+    -> (world -> fn -> [elem] -> Maybe elem)
+    -> (world -> pred -> [elem] -> Bool)
+    -> Form fn var pred
+    -> Bool 
+interpretFormula currentWorld accessibilityFn domainFn valuation fnMeaning predMeaning f =
+            let context = ModalContext {
+                actualWorld = return currentWorld,
+                accessibility = return . accessibilityFn,
+                domain = return . domainFn,
+                varV = return . Just . valuation,
+                fnV = \world f elems -> return (fnMeaning world f elems),
+                predV = \world p elems -> return (predMeaning world p elems)
+            }
+            in runReader (truthValue f) context 
+
+
 
 
 

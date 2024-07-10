@@ -5,7 +5,7 @@ module ModalModel where
     import ModalContext
     import Control.Monad.Identity
     
-    context :: ModalContext String String String Int Int Identity 
+    context :: ModalContext String String String Int [Int] Identity 
     context = ModalContext {
         actualWorld = return 0 
         ,accessibility = \case 
@@ -25,6 +25,6 @@ module ModalModel where
     a = Struct "a" []
     f1 :: Form String String String 
     f1 = Lambda "x" (Lambda "x" (p ["x"]) (f ["x"])) a 
-    
+
     
 

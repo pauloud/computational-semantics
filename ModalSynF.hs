@@ -4,6 +4,8 @@ module ModalSynF where
 
 data Term fn var pred = Var var | Struct fn [Term fn var pred]
         | The var (Formula (Term fn var pred) var pred) 
+
+type Form fn var pred = Formula (Term fn var pred) var pred
 data Formula term var pred = Atom pred [var]
                | Eq term term
                | Neg  (Formula term var pred)
@@ -17,3 +19,4 @@ data Formula term var pred = Atom pred [var]
                | Diamond (Formula term var pred)
                |Lambda var (Formula term var pred) term
                deriving Eq
+
