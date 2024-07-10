@@ -5,69 +5,77 @@ import ModalSynF
 import Control.Monad (join, filterM)
 import Data.Maybe (isNothing, fromJust)
 import Data.Functor.Identity
+import Data.Void
 
 
 data ModalContext fn var pred world elem m = ModalContext {
-    actualWorld ::  ModalT fn var pred world elem m world,
-    accessibility :: world -> ModalT fn var pred world elem m [world],
-    domain :: world -> ModalT fn var pred world elem m [elem],
-    varV :: var -> ModalT fn var pred world elem m (Maybe elem),
-    fnV :: world -> fn -> [elem] -> ModalT fn var pred world elem m (Maybe elem),
-    predV :: world -> pred -> [elem] -> ModalT fn var pred world elem m Bool
+    actualWorld ::  m world,
+    accessibility :: world -> m [world],
+    domain :: world -> m [elem],
+    varV :: var -> m (Maybe elem),
+    fnV :: world -> fn -> [elem] ->  m (Maybe elem),
+    predV :: world -> pred -> [elem] -> m Bool
 }
 
 
 type ModalT fn var pred world elem m =
     ReaderT (ModalContext fn var pred world elem m) m
+type Substitution fn var pred world elem m = 
+    var -> ModalT fn var pred world elem m (Term fn var pred)
 
+askContext :: Monad m => ModalT fn var pred world elem m (ModalContext fn var pred world elem m)
+askContext = ask 
 termValue :: Eq var => Eq elem => Monad m =>
     Term fn var pred -> ModalT fn var pred world elem m (Maybe elem)
 termValue = \case
     Var x -> do
-        context <- ask
-        varV context x
+        context <- askContext
+        lift $ varV context x
     Struct f terms -> do
         values <- mapM termValue terms
         if any isNothing values then return Nothing else do
-            context <- ask
-            currentWorld <- actualWorld context
-            fnV context currentWorld f (map fromJust values)
+            context <- askContext
+            currentWorld <- lift $ actualWorld context
+            lift $ fnV context currentWorld f (map fromJust values)
     The x formula -> do
-        context <- ask
-        currentWorld <- actualWorld context
-        actualDomain <- domain context currentWorld
+        context <- askContext 
+        currentWorld <- lift $ actualWorld context
+        actualDomain <- lift $ domain context currentWorld
         elems <- query x actualDomain formula
         case elems of
             [e] -> return (Just e)
             _ -> return Nothing
 
-query :: (Monad m, Eq elem, Eq p) => p -> [elem] -> Form fn p pred -> ReaderT (ModalContext fn p pred world elem m) m [elem]
+query :: (Monad m, Eq elem, Eq var) => var -> [elem] -> Form fn var pred -> ModalT fn var pred world elem m [elem]
 query x domain formula=
     let bindX e context = context{varV = \y -> if y==x then return (Just e) else varV context y} in
         filterM (\e -> local (bindX e) (truthValue formula)) domain
 
-changeWorld :: Monad m =>  ModalT fn var pred world elem m world
+changeWorld :: Monad m =>  m world
     -> ModalT fn var pred world elem m a
     -> ModalT fn var pred world elem m a
 changeWorld w = local (\context -> context{actualWorld = w})
 
+
+
 inPossibleWorlds :: Monad m => ModalT fn var pred world elem m a
     -> ModalT fn var pred world elem m [a]
 inPossibleWorlds mV = do
-    context <- ask
-    worlds <- actualWorld context >>= accessibility context
-    mapM (\w -> changeWorld (return w)  mV) worlds
+    context <- askContext
+    w <- lift $ actualWorld context 
+    worlds <- lift $ accessibility context w
+    mapM (\w1 -> changeWorld (return w1)  mV) worlds
 
-type Form fn var pred = Formula (Term fn var pred) var pred
+
 truthValue :: Eq var => Eq elem => Monad m =>
     Form fn var pred -> ModalT fn var pred world elem m Bool
 truthValue = \case
     Atom p xs -> do
-        context <- ask
-        currentWorld <- actualWorld context
-        values <- mapM (varV context) xs
+        context <- askContext
+        currentWorld <- lift $ actualWorld context
+        values <- lift $ mapM (varV context) xs
         if any isNothing values then return False
-            else predV context currentWorld p (map fromJust values)
+            else lift $ predV context currentWorld p (map fromJust values)
     Eq t1 t2 -> do
         v1 <- termValue t1
         v2 <- termValue t2
@@ -87,7 +95,7 @@ truthValue = \case
         return (or truthValues)
     Lambda x f t -> withReaderT
         (\context -> context{varV = \y -> if y == x
-            then termValue t else varV context y})
+            then runReaderT (termValue t) context else varV context y})
         (truthValue f)
 
 interpretFormula :: (Eq elem, Eq var) => 
@@ -109,6 +117,8 @@ interpretFormula currentWorld accessibilityFn domainFn valuation fnMeaning predM
                 predV = \world p elems -> return (predMeaning world p elems)
             }
             in runReader (truthValue f) context 
+interpretFormulaC f = runReader (truthValue f)
+
 
 
 

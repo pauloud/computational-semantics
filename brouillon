@@ -45,9 +45,58 @@ formulaValue = \case
         return undefined
 
 
-
+askContext = asks fst
+askSubstituion:: Monad m => ModalT fn var pred world elem m (Substituion fn var pred world elem m)
+askSubstituion = asks snd 
 data ModalContextT world elem m = ModalContext {
   actualWorld :: forall a. (world -> ModalT world elem m a) -> ModalT world elem m a,
   possibleWorld :: forall a. (world -> ModalT world elem m a) -> ModalT world elem m [a],
 }
 type ModalT world elem m = ReaderT (ModalContextT world elem m) m 
+
+module ModalModel where
+
+data Player = X | O deriving(Eq,Show)
+grid1 = 
+    [[[O],[],[]],
+     [[],[X],[]],
+     [[],[X],[]]]
+grid11 = 
+    [[[O],[],[]],
+     [[O],[X],[]],
+     [[],[X],[]]]
+grid111 = 
+     [[[O],[X],[]],
+     [[O],[X],[]],
+     [[],[X],[]]]
+
+grid12 = 
+    [[[O],[O],[]],
+     [[],[X],[]],
+     [[],[X],[]]]
+grid121 =
+    [[[O],[O],[X]],
+     [[],[X],[]],
+     [[],[X],[]]]
+
+nextPlayer g 
+    |g == grid1 || g == grid121 = Just O 
+    |g == grid11 || g==grid12 = Just X 
+    |g == grid111 = Nothing 
+    |otherwise = error $ "nextPlayer function not implemented for grid " ++ show g
+winner g 
+    |g == grid111 = Just X
+    |elem g [grid1,grid11,grid12,grid121] = Nothing 
+    |otherwise = error $ "winner function not implemented for grid " ++ show g
+
+
+data Elem = Player Player | Pos Int Int deriving (Show,Eq)  
+
+
+
+
+
+
+
+
+
