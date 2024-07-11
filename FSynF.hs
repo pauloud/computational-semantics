@@ -1,5 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 module FSynF where
+
+import Data.List
 import Data.List
 
 data Column = A' | B' | C' | D' | E'
@@ -95,6 +97,8 @@ data FormulaGen var term = Atom Predicate [term]
                | Disj [FormulaGen var term]
                | Forall var (FormulaGen var term)
                | Exists var (FormulaGen var term)
+               | Box (FormulaGen var term)
+               | Diamond (FormulaGen var term)
                deriving Eq
 type Formula = FormulaGen Variable
 
@@ -113,6 +117,8 @@ instance Show term => Show (Formula term) where
   show (Disj fs)     = "disj" ++ show fs
   show (Forall v f)  = "A " ++  show v ++ (' ' : show f)
   show (Exists v f)  = "E " ++  show v ++ (' ' : show f)
+  show (Box f) = "[]" ++ show f 
+  show (Diamond f) = "<>" ++ show f
 
 
 formula0 = Atom "R" [x,y] :: Formula Variable
@@ -160,11 +166,24 @@ freeVars = nub . freeVarsR where
     Disj fs -> concatMap freeVarsR fs
     Forall x f -> [y | y <- freeVarsR f, y /= x ]
     Exists x f -> [y | y <- freeVarsR f, y /= x ]
-    
+    Box f -> freeVarsR f
+    Diamond f -> freeVarsR f
 
 
 hasFreeVarsExcept :: Eq var => [var] -> FormulaGen var (TermGen var fn) -> Bool
 hasFreeVarsExcept xs f = [y | y<-freeVars f, y `notElem` xs] /= []
 
-
+isModal :: FormulaGen var term -> Bool
+isModal = \case 
+  Atom _ _ -> False 
+  Eq _ _ -> False 
+  Box _ -> True 
+  Diamond _ -> True
+  Impl f1 f2 -> isModal f1 && isModal f2 
+  Conj fs -> any isModal fs 
+  Disj fs -> any isModal fs 
+  Forall _ f -> isModal f 
+  Exists _ f -> isModal f 
+   
+  
 

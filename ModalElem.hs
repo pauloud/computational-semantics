@@ -1,8 +1,8 @@
 {-# LANGUAGE LambdaCase #-}
-module ModalContext where
+module ModalElem where
 import Control.Monad.Reader
 import ModalSynF
-import Control.Monad (join, filterM)
+import Control.Monad (join)
 import Data.Maybe (isNothing, fromJust)
 
 
@@ -10,17 +10,16 @@ data ModalContext fn var pred world elem m = ModalContext {
     actualWorld ::  ModalT fn var pred world elem m world,
     accessibility :: world -> ModalT fn var pred world elem m [world],
     domain :: world -> ModalT fn var pred world elem m [elem],
-    fnV :: world -> fn -> [elem] -> ModalT fn var pred world elem m (Maybe elem),
+    fnV :: fn -> [elem] -> ModalT fn var pred world elem m (Maybe elem),
     varV :: var -> ModalT fn var pred world elem m (Maybe elem),
-    predV :: world -> pred -> [elem] -> ModalT fn var pred world elem m Bool
+    predV :: pred -> [elem] -> ModalT fn var pred world elem m Bool
 }
 
 
 type ModalT fn var pred world elem m =
     ReaderT (ModalContext fn var pred world elem m) m
 
-termValue :: Eq var => Eq elem => Monad m => 
-    Term fn var pred -> ModalT fn var pred world elem m (Maybe elem)
+termValue :: Monad m => Term fn var pred -> ModalT fn var pred world elem m (Maybe elem)
 termValue = \case
     Var x -> do
         context <- ask
@@ -29,22 +28,10 @@ termValue = \case
         values <- mapM termValue terms
         if any isNothing values then return Nothing else do
             context <- ask
-            currentWorld <- actualWorld context
-            fnV context currentWorld f (map fromJust values)
-    The x formula -> do 
-        context <- ask
-        currentWorld <- actualWorld context 
-        actualDomain <- domain context currentWorld 
-        elems <- query x actualDomain formula
-        case elems of 
-            [e] -> return (Just e)
-            _ -> return Nothing 
+            fnV context f (map fromJust values)
+    The x formula -> return $ error "definite description not yet implemented"
 
-query :: (Monad m, Eq elem, Eq p) => p -> [elem] -> Form fn p pred -> ReaderT (ModalContext fn p pred world elem m) m [elem]
-query x domain formula= 
-    let bindX e context = context{varV = \y -> if y==x then return (Just e) else varV context y} in 
-        filterM (\e -> local (bindX e) (truthValue formula)) domain 
-        
+
 changeWorld :: Monad m =>  ModalT fn var pred world elem m world
     -> ModalT fn var pred world elem m a
     -> ModalT fn var pred world elem m a
@@ -63,10 +50,9 @@ truthValue :: Eq var => Eq elem => Monad m =>
 truthValue = \case
     Atom p xs -> do
         context <- ask
-        currentWorld <- actualWorld context
         values <- mapM (varV context) xs
         if any isNothing values then return False 
-            else predV context currentWorld p (map fromJust values)
+            else predV context p (map fromJust values)
     Eq t1 t2 -> do
         v1 <- termValue t1
         v2 <- termValue t2
