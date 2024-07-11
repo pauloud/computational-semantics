@@ -8,6 +8,8 @@ module DefiniteDescSyn where
    
 
     type Formula var fn  =  F.FormulaGen var (Term var fn)
+
+    
         
     
     
