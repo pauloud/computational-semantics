@@ -7,8 +7,9 @@ module DefiniteDescSyn where
         | The var (Formula var fn) 
    
 
-    data Formula var fn  = F (F.FormulaGen var var) 
-        | Lambda var (Formula var fn) (Term var fn)
+    type Formula var fn  =  F.FormulaGen var (Term var fn)
+
+    
         
     
     
