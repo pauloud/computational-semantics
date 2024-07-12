@@ -40,10 +40,10 @@ termValue = \case
             [e] -> return (Just e)
             _ -> return Nothing 
 
+bindVarToElem x e context = context{varV = \y -> if y==x then return (Just e) else varV context y}
 query :: (Monad m, Eq elem, Eq p) => p -> [elem] -> Form fn p pred -> ReaderT (ModalContext fn p pred world elem m) m [elem]
 query x domain formula= 
-    let bindX e context = context{varV = \y -> if y==x then return (Just e) else varV context y} in 
-        filterM (\e -> local (bindX e) (truthValue formula)) domain 
+        filterM (\e -> local (bindVarToElem x e) (truthValue formula)) domain 
         
 changeWorld :: Monad m =>  ModalT fn var pred world elem m world
     -> ModalT fn var pred world elem m a
@@ -78,6 +78,16 @@ truthValue = \case
        return (not b1 || b2)
     Conj fs -> and <$> mapM truthValue fs 
     Disj fs -> or <$> mapM truthValue fs 
+    Forall x f -> do 
+        context <- ask
+        currentWorld <- actualWorld context
+        elems <- domain context currentWorld
+        and <$> mapM (\elem -> withReaderT (bindVarToElem x elem) (truthValue f)) elems 
+    Exists x f -> do 
+        context <- ask
+        currentWorld <- actualWorld context
+        elems <- domain context currentWorld
+        or <$> mapM (\elem -> withReaderT (bindVarToElem x elem) (truthValue f)) elems    
     Box f -> do
         truthValues <- inPossibleWorlds (truthValue f)
         return (and truthValues)
@@ -104,7 +114,7 @@ interpretFormula currentWorld accessibilityFn domainFn valuation fnMeaning predM
             let context = ModalContext {
                 actualWorld = return currentWorld,
                 accessibility = return . accessibilityFn,
-                domain = return . domainFn,
+                domain = return . nub . domainFn,
                 varV = return . Just . valuation,
                 fnV = \world f elems -> return (fnMeaning world f elems),
                 predV = \world p elems -> return (predMeaning world p elems)

@@ -1,5 +1,3 @@
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-{-# HLINT ignore "Use newtype instead of data" #-}
 module ModalSynF where
 
 data Term fn var pred = Var var | Struct fn [Term fn var pred]
