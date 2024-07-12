@@ -3,7 +3,7 @@ module ModalContext where
 import Control.Monad.Reader
 import ModalSynF
 import Control.Monad (join, filterM)
-import Data.Maybe (isNothing, fromJust)
+import Data.Maybe (isNothing, fromJust,isJust)
 
 
 data ModalContext fn var pred world elem m = ModalContext {
@@ -70,7 +70,7 @@ truthValue = \case
     Eq t1 t2 -> do
         v1 <- termValue t1
         v2 <- termValue t2
-        return (v1 == v2)
+        return (isJust v1 && v1 == v2)
     Neg f -> not <$> truthValue f
     Impl f1 f2 -> do 
        b1 <- truthValue f1 
@@ -84,12 +84,33 @@ truthValue = \case
     Diamond f -> do
         truthValues <- inPossibleWorlds (truthValue f)
         return (or truthValues)
-    Lambda x f t -> withReaderT
-        (\context -> context{varV = \y -> if y == x 
-            then termValue t else varV context y})
-        (truthValue f)
+    Lambda x f t -> do
+        value <- termValue t 
+        withReaderT
+            (\context -> context{varV = \y -> if y == x 
+            then return value else varV context y})
+            (truthValue f)
     
-   
+interpretFormula :: (Eq elem, Eq var) =>
+    world -- initial actual world
+    -> (world -> [world]) -- accessibility relation
+    -> (world -> [elem]) -- domain of each world
+    -> (var -> elem) -- valuation of free vars
+    -> (world -> fn -> [elem] -> Maybe elem) -- semantic of functions in each world
+    -> (world -> pred -> [elem] -> Bool) -- semantic of predicates in each world
+    -> Form fn var pred
+    -> Bool
+interpretFormula currentWorld accessibilityFn domainFn valuation fnMeaning predMeaning f =
+            let context = ModalContext {
+                actualWorld = return currentWorld,
+                accessibility = return . accessibilityFn,
+                domain = return . domainFn,
+                varV = return . Just . valuation,
+                fnV = \world f elems -> return (fnMeaning world f elems),
+                predV = \world p elems -> return (predMeaning world p elems)
+            }
+            in runReader (truthValue f) context
+interpretFormulaC f = runReader (truthValue f)
 
 
 
